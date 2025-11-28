@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Todo-list App</title>
+    <style>
+        :root {
+            --bg: #f8f9fa; --card: #ffffff; 
+            --text: #202124; --text-light: #5f6368;
+            --primary: #1a73e8; --primary-bg: #e8f0fe;
+            --border: #dadce0;
+            --danger: #d93025; --success: #1e8e3e; --warning: #f9ab00;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg); color: var(--text);
+            margin: 0; padding: 0;
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; /* Mobile Fixed Layout */
+            display: flex; justify-content: center;
+        }
+
+        .app {
+            width: 100%; max-width: 500px; background: var(--card);
+            display: flex; flex-direction: column; height: 100%; position: relative;
+        }
+        @media(min-width: 520px) {
+            body { position: static; height: 100vh; padding-top: 5vh; align-items: flex-start; }
+            .app { height: 90vh; border-radius: var(--radius); box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        }
+
+        /* --- Header --- */
+        header {
+            padding: 16px 20px 8px 20px; padding-top: max(16px, env(safe-area-inset-top));
+            display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+        }
+        h1 { margin: 0; font-size: 1.4rem; font-weight: 600; }
+        .header-actions { display: flex; gap: 15px; }
+        .btn-icon-text { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: var(--text); position: relative;}
+        .btn-icon-text.active { color: var(--primary); }
+
+        /* --- Filter --- */
+        .filter-row {
+            padding: 8px 20px; display: flex; gap: 8px; 
+            border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0;
+            scrollbar-width: none;
+        }
+        .filter-row::-webkit-scrollbar { display: none; }
+        .chip {
+            padding: 6px 16px; border-radius: 100px; font-size: 0.85rem;
+            background: #f1f3f4; border: 1px solid transparent; color: var(--text);
+            cursor: pointer; white-space: nowrap; user-select: none; flex-shrink: 0;
+        }
+        .chip.active { background: var(--primary-bg); color: var(--primary); border-color: var(--primary-bg); }
+        .chip.active-outline { background: #fff; border-color: var(--primary); color: var(--primary); }
+
+        /* --- List --- */
+        .list-area { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0; }
+        
+        .task-row {
+            display: flex; padding: 12px 20px; border-bottom: 1px solid #f1f3f4; align-items: flex-start;
+            transition: background 0.2s;
+        }
+        /* 批量选中状态 */
+        .task-row.selected { background: var(--primary-bg); }
+
+        .check-circle {
+            width: 22px; height: 22px; border: 2px solid #bbc0c5; border-radius: 50%;
+            margin-right: 14px; margin-top: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s;
+        }
+        /* 批量模式下的 Checkbox 样式 */
+        .batch-mode .check-circle { border-radius: 4px; border-color: var(--text-light); }
+        .batch-mode .check-circle.checked { background: var(--primary); border-color: var(--primary); }
+        .batch-mode .check-circle.checked::after { content: '✔'; color: white; font-size: 14px; }
+        
+        /* 普通模式完成样式 */
+        .task-row:not(.batch-mode).completed .check-circle { border-color: var(--success); background: var(--success); }
+        .task-row:not(.batch-mode).completed .check-circle::after { content: '✔'; color: white; font-size: 14px; }
+
+        .task-body { flex: 1; min-width: 0; padding: 4px 8px; margin: -4px -8px; border-radius: 6px; }
+        @media (hover: hover) { .task-body:hover { background: #f1f3f4; } }
+
+        .task-top-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        .task-title { font-size: 1rem; line-height: 1.4; display: block; word-break: break-word; }
+        .task-row.completed .task-title { color: var(--text-light); text-decoration: line-through; }
+        
+        .task-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; align-items: center; }
+        .mini-tag { font-size: 0.7rem; background: #f1f3f4; color: var(--text-light); padding: 2px 8px; border-radius: 4px; }
+        
+        /* 日期徽章 */
+        .date-badge { font-size: 0.75rem; display: flex; align-items: center; gap: 4px; color: var(--text-light); }
+        .date-badge.overdue { color: var(--danger); font-weight: 500; }
+        .date-badge.today { color: var(--warning); font-weight: 500; }
+
+        /* --- Input Area --- */
+        .input-wrapper {
+            border-top: 1px solid var(--border); background: #fff;
+            padding: 12px 20px; display: flex; flex-direction: column; gap: 12px; flex-shrink: 0;
+            padding-bottom: max(12px, env(safe-area-inset-bottom)); box-shadow: 0 -2px 10px rgba(0,0,0,0.03);
+        }
+        .main-input-row { display: flex; gap: 10px; align-items: center; }
+        .input-box { flex: 1; border: none; background: #f1f3f4; padding: 12px 16px; border-radius: 20px; font-size: 1rem; outline: none; -webkit-appearance: none; }
+        .btn-icon { width: 40px; height: 40px; border-radius: 50%; border: none; background: transparent; cursor: pointer; font-size: 1.4rem; display: flex; align-items: center; justify-content: center; color: var(--text-light); flex-shrink: 0; }
+        .btn-icon.active { background: var(--primary-bg); color: var(--primary); }
+        .btn-primary { background: var(--primary); color: white; border-radius: 12px; font-size: 1.2rem; }
+
+        /* --- Advanced Panel (Date + Tags) --- */
+        .advanced-panel { display: none; flex-direction: column; gap: 10px; padding-bottom: 5px; }
+        .advanced-panel.show { display: flex; }
+        .adv-row { display: flex; gap: 10px; }
+        .tag-input { flex: 1; border: 1px solid var(--border); padding: 10px; border-radius: 8px; font-size: 0.9rem; outline: none; -webkit-appearance: none; }
+        .date-input { flex: 1; border: 1px solid var(--border); padding: 9px; border-radius: 8px; font-size: 0.9rem; font-family: inherit; background: #fff; -webkit-appearance: none; }
+        .draft-tags { display: flex; gap: 8px; flex-wrap: wrap; min-height: 28px; }
+        .draft-chip { background: var(--primary-bg); color: var(--primary); padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
+
+        /* --- Batch Action Bar (Replaces Input) --- */
+        .batch-bar {
+            display: none; align-items: center; justify-content: space-between;
+            background: var(--primary-bg); color: var(--primary);
+            padding: 12px 20px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+        }
+        .batch-bar.active { display: flex; }
+        .batch-btn { border: none; background: #fff; padding: 8px 16px; border-radius: 8px; font-size: 0.9rem; color: var(--text); cursor: pointer; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .batch-btn.danger { color: var(--danger); }
+
+        /* --- Modals (Base Styles) --- */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(2px); }
+        .modal-overlay.active { display: flex; }
+        .modal-card { background: white; width: 100%; max-width: 400px; border-radius: 16px; padding: 24px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow-y: auto;}
+        
+        .detail-title { font-size: 1.2rem; font-weight: 600; border: none; width: 100%; resize: none; font-family: inherit; margin-bottom: 10px; outline: none; }
+        .detail-desc { width: 100%; height: 80px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-family: inherit; font-size: 0.95rem; resize: none; margin-bottom: 15px; box-sizing: border-box; -webkit-appearance: none; }
+        .btn-block { width: 100%; padding: 14px; background: #f1f3f4; border:none; border-radius: 12px; cursor: pointer; font-size: 1rem; margin-bottom: 10px; font-weight: 500; }
+        .filter-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <header>
+        <h1>待办事项</h1>
+        <div class="header-actions">
+            <!-- 排序按钮 (切换日期/创建时间) -->
+            <button class="btn-icon-text" id="btnSort" onclick="toggleSort()" title="排序">⇅</button>
+            <!-- 批量选择按钮 -->
+            <button class="btn-icon-text" id="btnBatch" onclick="toggleBatchMode()" title="批量操作">☑</button>
+            <!-- 数据管理 -->
+            <button class="btn-icon-text" onclick="openDataModal()" title="更多">⋮</button>
+        </div>
+    </header>
+
+    <div class="filter-row" id="topFilterBar"></div>
+
+    <div class="list-area" id="taskList"></div>
+
+    <!-- 正常输入栏 -->
+    <div class="input-wrapper" id="normalInputBar">
+        <div class="advanced-panel" id="advancedPanel">
+            <div class="draft-tags" id="draftTagsList"></div>
+            <div class="adv-row">
+                <!-- 日期输入 -->
+                <input type="date" id="newDateInput" class="date-input" title="截止日期">
+                <!-- 标签输入 -->
+                <input type="text" id="newTagInput" class="tag-input" placeholder="添加标签...">
+            </div>
+        </div>
+        <div class="main-input-row">
+            <button class="btn-icon" id="btnToggleMode" onclick="toggleInputMode()" title="高级模式">≡</button>
+            <input type="text" id="taskTitleInput" class="input-box" placeholder="添加任务..." autocomplete="off">
+            <button class="btn-icon btn-primary" onclick="createTask()">＋</button>
+        </div>
+    </div>
+
+    <!-- 批量操作栏 (默认隐藏) -->
+    <div class="batch-bar" id="batchActionBar">
+        <span id="batchCount">已选 0 项</span>
+        <div style="display:flex; gap:10px;">
+            <button class="batch-btn" onclick="batchComplete()">完成</button>
+            <button class="batch-btn danger" onclick="batchDelete()">删除</button>
+            <button class="batch-btn" onclick="toggleBatchMode()">取消</button>
+        </div>
+    </div>
+</div>
+
+<!-- 详情模态框 (增加了日期修改) -->
+<div class="modal-overlay" id="detailModal">
+    <div class="modal-card">
+        <textarea id="editTitle" class="detail-title" rows="1"></textarea>
+        <textarea id="editDesc" class="detail-desc" placeholder="添加备注..."></textarea>
+        
+        <div style="margin-bottom: 15px;">
+            <label style="font-size: 0.85rem; color: var(--text-light); font-weight: 600;">截止日期</label>
+            <input type="date" id="editDateInput" class="date-input" style="width:100%; box-sizing:border-box; margin-top:5px;">
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <label style="font-size: 0.85rem; color: var(--text-light); font-weight: 600;">标签</label>
+            <div class="adv-row" style="margin-top: 5px;">
+                <input type="text" id="detailAddTagInput" class="tag-input" placeholder="输入标签，回车添加">
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;" id="detailTagList"></div>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-top: auto;">
+            <button class="btn-block" style="background:var(--primary); color:white; margin:0;" onclick="closeDetail()">保存</button>
+            <button class="btn-block" style="background:#fee2e2; color:var(--danger); width:60px; margin:0;" onclick="deleteCurrentTask()">🗑</button>
+        </div>
+    </div>
+</div>
+
+<!-- 筛选模态框 -->
+<div class="modal-overlay" id="filterModal">
+    <div class="modal-card">
+        <h3 style="margin-top:0;">标签筛选</h3>
+        <div class="filter-grid" id="modalFilterGrid"></div>
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button class="btn-block" style="width:auto; margin:0; background:none;" onclick="clearFilters()">重置</button>
+            <button class="btn-block" style="width:auto; margin:0; background:var(--primary); color:white;" onclick="closeFilterModal()">确认</button>
+        </div>
+    </div>
+</div>
+
+<!-- 数据管理模态框 -->
+<div class="modal-overlay" id="dataModal">
+    <div class="modal-card">
+        <h3 style="margin-top:0;">数据管理</h3>
+        <p style="color:var(--text-light); font-size:0.9rem; margin-bottom:20px;">数据仅保存在当前浏览器。</p>
+        <button class="btn-block" onclick="exportData()">📤 导出备份 (.json)</button>
+        <button class="btn-block" onclick="triggerImport()" style="color: var(--primary); background: #e8f0fe;">📥 导入备份</button>
+        <input type="file" id="importInput" accept=".json" style="display:none" onchange="handleFile(this)">
+        <div style="margin-top: 20px; text-align: center;">
+            <button class="btn-block" style="background:transparent; margin:0;" onclick="closeDataModal()">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const KEY = 'todo_v6_full';
+    let tasks = [];
+    let draftTags = [];
+    let activeFilters = new Set();
+    let editingId = null;
+    
+    // 新增状态
+    let sortMode = 'created'; // 'created' | 'date'
+    let isBatchMode = false;
+    let selectedIds = new Set(); // 批量选中 ID
+
+    function init() {
+        const raw = localStorage.getItem(KEY);
+        if(raw) { try { tasks = JSON.parse(raw); } catch(e) { tasks = []; } }
+        renderList(); renderTopFilter();
+        bindEnter('taskTitleInput', createTask);
+        bindEnter('newTagInput', addDraftTag);
+        bindEnter('detailAddTagInput', addDetailTag);
+    }
+    function bindEnter(id, cb) { document.getElementById(id).addEventListener('keypress', (e) => { if(e.key==='Enter') cb(); }); }
+    function save() { localStorage.setItem(KEY, JSON.stringify(tasks)); renderList(); renderTopFilter(); }
+    function safeText(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+    // --- Core Logic: Sorting ---
+    function toggleSort() {
+        sortMode = sortMode === 'created' ? 'date' : 'created';
+        document.getElementById('btnSort').classList.toggle('active', sortMode === 'date');
+        renderList();
+    }
+    
+    function getSortedTasks(taskList) {
+        if(sortMode === 'created') return taskList; // 默认本来就是倒序
+        // 日期排序：已完成沉底 -> 有截止日期优先(按时间升序) -> 无截止日期
+        return [...taskList].sort((a, b) => {
+            if(a.completed !== b.completed) return a.completed - b.completed; // 完成的在后
+            if(a.dueDate && !b.dueDate) return -1; // 有日期的在前
+            if(!a.dueDate && b.dueDate) return 1;
+            if(a.dueDate && b.dueDate) {
+                if(a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+            }
+            return b.createdAt - a.createdAt; // 最后按创建时间
+        });
+    }
+
+    // --- Core Logic: List Rendering ---
+    function renderList() {
+        const l = document.getElementById('taskList'); l.innerHTML = '';
+        
+        // 1. 筛选
+        let filtered = tasks.filter(t => activeFilters.size===0 || t.tags.some(g => activeFilters.has(g)));
+        
+        // 2. 排序
+        filtered = getSortedTasks(filtered);
+
+        if(!filtered.length) { l.innerHTML='<div style="text-align:center; padding:40px; color:#ccc;">无任务</div>'; return; }
+
+        filtered.forEach(t => {
+            const row = document.createElement('div');
+            // 如果是批量模式，且已选中，加上 selected 类
+            row.className = `task-row ${t.completed?'completed':''} ${isBatchMode?'batch-mode':''} ${selectedIds.has(t.id)?'selected':''}`;
+            
+            // Checkbox Area
+            const check = document.createElement('div');
+            // 如果是批量模式且选中，或者普通模式已完成，加上 checked 样式
+            const isChecked = isBatchMode ? selectedIds.has(t.id) : t.completed;
+            check.className = `check-circle ${isChecked?'checked':''}`;
+            
+            check.onclick = (e) => {
+                e.stopPropagation();
+                if(isBatchMode) toggleSelection(t.id);
+                else toggleComplete(t.id);
+            };
+
+            // Body Area
+            const body = document.createElement('div');
+            body.className = 'task-body';
+            body.onclick = () => {
+                if(isBatchMode) toggleSelection(t.id);
+                else openDetail(t.id);
+            };
+
+            // Date Badge Logic
+            let dateHtml = '';
+            if(t.dueDate) {
+                const diff = getDateDiff(t.dueDate);
+                let badgeClass = 'date-badge';
+                let dateIcon = '📅';
+                let dateText = t.dueDate.slice(5); // Show MM-DD
+                
+                if(diff < 0) { badgeClass += ' overdue'; dateIcon='⚠️'; dateText += ' (已过期)'; }
+                else if(diff === 0) { badgeClass += ' today'; dateIcon='⏰'; dateText = '今天'; }
+                else if(diff === 1) { dateText = '明天'; }
+                
+                dateHtml = `<span class="${badgeClass}">${dateIcon} ${dateText}</span>`;
+            }
+
+            body.innerHTML = `
+                <div class="task-top-line">
+                    <span class="task-title">${safeText(t.title)}</span>
+                </div>
+                <div class="task-meta">
+                    ${dateHtml}
+                    ${t.tags.map(tag=>`<span class="mini-tag">${safeText(tag)}</span>`).join('')}
+                </div>
+            `;
+            
+            row.appendChild(check); 
+            row.appendChild(body); 
+            l.appendChild(row);
+        });
+    }
+
+    // --- Helper: Date Diff ---
+    function getDateDiff(dateStr) {
+        const today = new Date().setHours(0,0,0,0);
+        const target = new Date(dateStr).setHours(0,0,0,0);
+        return (target - today) / (1000 * 60 * 60 * 24);
+    }
+
+    // --- Batch Mode Logic ---
+    function toggleBatchMode() {
+        isBatchMode = !isBatchMode;
+        selectedIds.clear();
+        document.getElementById('btnBatch').classList.toggle('active', isBatchMode);
+        
+        // 切换底部栏显示
+        document.getElementById('normalInputBar').style.display = isBatchMode ? 'none' : 'flex';
+        document.getElementById('batchActionBar').classList.toggle('active', isBatchMode);
+        
+        updateBatchUI();
+        renderList();
+    }
+
+    function toggleSelection(id) {
+        if(selectedIds.has(id)) selectedIds.delete(id);
+        else selectedIds.add(id);
+        updateBatchUI();
+        renderList(); // 刷新高亮
+    }
+
+    function updateBatchUI() {
+        document.getElementById('batchCount').innerText = `已选 ${selectedIds.size} 项`;
+    }
+
+    function batchDelete() {
+        if(selectedIds.size === 0) return;
+        if(confirm(`确定删除选中的 ${selectedIds.size} 个任务吗？`)) {
+            tasks = tasks.filter(t => !selectedIds.has(t.id));
+            toggleBatchMode(); // Exit batch mode
+            save();
+        }
+    }
+
+    function batchComplete() {
+        if(selectedIds.size === 0) return;
+        tasks.forEach(t => {
+            if(selectedIds.has(t.id)) t.completed = true;
+        });
+        toggleBatchMode();
+        save();
+    }
+
+    // --- Standard Actions ---
+    function toggleComplete(id) { const t=tasks.find(x=>x.id===id); if(t){t.completed=!t.completed; save();} }
+    
+    // --- Creation ---
+    function toggleInputMode() {
+        const p=document.getElementById('advancedPanel');
+        p.classList.toggle('show'); document.getElementById('btnToggleMode').classList.toggle('active');
+        if(p.classList.contains('show')) document.getElementById('newTagInput').focus();
+    }
+    function addDraftTag() {
+        const i=document.getElementById('newTagInput'); const v=i.value.trim();
+        if(v && !draftTags.includes(v)) { draftTags.push(v); renderDraftTags(); } i.value='';
+    }
+    function removeDraftTag(t) { draftTags=draftTags.filter(x=>x!==t); renderDraftTags(); }
+    function renderDraftTags() {
+        document.getElementById('draftTagsList').innerHTML = draftTags.map(t=>
+            `<div class="draft-chip">${safeText(t)} <span onclick="removeDraftTag('${t}')">&times;</span></div>`
+        ).join('');
+    }
+    function createTask() {
+        const i=document.getElementById('taskTitleInput'); const t=i.value.trim();
+        const d=document.getElementById('newDateInput').value; // Get Date
+        if(!t) return;
+        tasks.unshift({ 
+            id: Date.now().toString(36), 
+            title: t, 
+            desc: '', 
+            tags: [...draftTags], 
+            dueDate: d || null, // Save Date
+            completed: false, 
+            createdAt: Date.now() 
+        });
+        i.value=''; document.getElementById('newDateInput').value=''; 
+        draftTags=[]; renderDraftTags(); save();
+    }
+
+    // --- Details ---
+    function openDetail(id) {
+        editingId=id; const t=tasks.find(x=>x.id===id); if(!t)return;
+        document.getElementById('editTitle').value=t.title; 
+        document.getElementById('editDesc').value=t.desc||'';
+        document.getElementById('editDateInput').value = t.dueDate || ''; // Load Date
+        renderDetailTags(t);
+        const ta = document.getElementById('editTitle'); ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';
+        document.getElementById('detailModal').classList.add('active');
+    }
+    function closeDetail() {
+        if(editingId) {
+            const t=tasks.find(x=>x.id===editingId);
+            if(t) { 
+                t.title=document.getElementById('editTitle').value.trim()||'未命名'; 
+                t.desc=document.getElementById('editDesc').value.trim();
+                t.dueDate=document.getElementById('editDateInput').value || null; // Save Date
+                save(); 
+            }
+        }
+        document.getElementById('detailModal').classList.remove('active'); editingId=null;
+    }
+    function renderDetailTags(t) { document.getElementById('detailTagList').innerHTML = t.tags.map(g=>`<div class="chip" style="font-size:0.8rem; padding:4px 10px;">${safeText(g)} <span style="margin-left:6px; color:#999; cursor:pointer" onclick="removeDetailTag('${g}')">&times;</span></div>`).join(''); }
+    function addDetailTag() { const i=document.getElementById('detailAddTagInput'); const v=i.value.trim(); const t=tasks.find(x=>x.id===editingId); if(t&&v&&!t.tags.includes(v)){t.tags.push(v); i.value=''; save(); renderDetailTags(t);} }
+    function removeDetailTag(g) { const t=tasks.find(x=>x.id===editingId); if(t){t.tags=t.tags.filter(x=>x!==g); save(); renderDetailTags(t);} }
+    function deleteCurrentTask() { if(confirm("删除此任务？")){tasks=tasks.filter(x=>x.id!==editingId); closeDetail(); save();} }
+
+    // --- Filter & Data (Same as V5) ---
+    function getTagCounts() { const c={}; tasks.forEach(t=>t.tags.forEach(g=>c[g]=(c[g]||0)+1)); return Object.entries(c).sort((a,b)=>b[1]-a[1]); }
+    function renderTopFilter() {
+        const b = document.getElementById('topFilterBar'); const s = getTagCounts();
+        let h = `<button class="chip ${activeFilters.size===0?'active':''}" onclick="clearFilters()">全部</button>`;
+        s.slice(0,3).forEach(([t])=>h+=`<button class="chip ${activeFilters.has(t)?'active':''}" onclick="toggleFilter('${t}')">${safeText(t)}</button>`);
+        if(s.length>3) h+=`<button class="chip" style="font-weight:bold; letter-spacing:2px;" onclick="openFilterModal()">•••</button>`;
+        b.innerHTML = h;
+    }
+    function openFilterModal() {
+        const g = document.getElementById('modalFilterGrid'); const s = getTagCounts();
+        g.innerHTML = s.length ? s.map(([t,c])=>`<button class="chip ${activeFilters.has(t)?'active-outline':''}" onclick="toggleFilter('${t}',true)">${safeText(t)} (${c})</button>`).join('') : '<span style="color:#999">暂无标签</span>';
+        document.getElementById('filterModal').classList.add('active');
+    }
+    function toggleFilter(t, refresh=false) { if(activeFilters.has(t)) activeFilters.delete(t); else activeFilters.add(t); renderList(); renderTopFilter(); if(refresh) openFilterModal(); }
+    function clearFilters() { activeFilters.clear(); renderList(); renderTopFilter(); closeFilterModal(); }
+    function closeFilterModal() { document.getElementById('filterModal').classList.remove('active'); }
+    
+    function openDataModal() { document.getElementById('dataModal').classList.add('active'); }
+    function closeDataModal() { document.getElementById('dataModal').classList.remove('active'); }
+    function exportData() { const a=document.createElement('a'); a.href="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(tasks)); a.download=`todo_backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); }
+    function triggerImport() { document.getElementById('importInput').click(); }
+    function handleFile(input) {
+        const f=input.files[0]; if(!f)return;
+        const r=new FileReader(); r.onload=(e)=>{ try { const d=JSON.parse(e.target.result); if(Array.isArray(d)&&confirm(`覆盖当前 ${tasks.length} 条数据？`)){tasks=d; save(); closeDataModal(); alert('导入成功');} else {alert('格式错误');} } catch(err){alert('JSON失败');} input.value=''; }; r.readAsText(f);
+    }
+
+    init();
+</script>
+</body>
+</html>
